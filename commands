@@ -1,0 +1,114 @@
+# Install Docker
+yum install docker -y
+systemctl start docker
+
+# Install kubectl
+curl -LO "https://dl.k8s.io/release/$(curl -L -s https://dl.k8s.io/release/stable.txt)/bin/linux/amd64/kubectl"
+chmod +x kubectl
+mv kubectl /usr/local/bin/
+
+# Install kops
+curl -Lo kops https://github.com/kubernetes/kops/releases/download/$(curl -s https://api.github.com/repos/kubernetes/kops/releases/latest | grep tag_name | cut -d '"' -f 4)/kops-linux-amd64
+chmod +x kops
+mv kops /usr/local/bin/kops
+
+# Verify installation
+kops version
+kubectl version
+
+# Verify S3 bucket
+aws s3 ls
+
+# Set Kops state store
+export KOPS_STATE_STORE=s3://saikiran.devops-01
+
+# Create cluster
+kops create cluster \
+  --name saikiran.k8s.local \
+  --zones=us-east-2a,us-east-2b \
+  --master-size=c7i-flex.large \
+  --master-count=1 \
+  --master-volume-size=20 \
+  --node-size=t3.micro \
+  --node-count=2 \
+  --node-volume-size=20 \
+  --image=ami-0fe18bc3cfa53a248
+
+# Apply cluster configuration
+kops update cluster --name saikiran.k8s.local --yes --admin
+
+# Validate cluster
+kops validate cluster --wait 10m
+
+# View cluster
+kops get cluster
+
+# Check nodes and pods
+kubectl get nodes
+kubectl get pods
+
+# List API resources
+kubectl api-resources
+
+# ------------------------
+# Pod Operations
+# ------------------------
+
+vim pod.yml
+kubectl create -f pod.yml
+
+kubectl get pods
+kubectl logs mypod
+kubectl describe pod mypod
+
+docker login
+docker ps
+docker images
+
+kubectl delete pod mypod
+
+# ------------------------
+# Service Operations
+# ------------------------
+
+vim svc.yml
+kubectl apply -f svc.yml
+
+kubectl get svc
+kubectl describe svc myservice
+
+kubectl get pods --show-labels
+kubectl get pods -o wide
+
+curl -I http://<ELB-DNS-NAME>/
+
+cat pod.yml
+cat svc.yml
+
+# ------------------------
+# Replication Controller
+# ------------------------
+
+vim myRc.yml
+kubectl apply -f myRc.yml
+
+kubectl get rc
+kubectl get pods
+
+# Scale Replication Controller
+kubectl scale rc myRc --replicas=2
+
+# Delete all pods
+kubectl delete pod --all
+
+# ------------------------
+# Node Information
+# ------------------------
+
+kubectl get nodes
+
+# ------------------------
+# Delete Cluster
+# ------------------------
+
+kops delete cluster --name saikiran.k8s.local --yes
