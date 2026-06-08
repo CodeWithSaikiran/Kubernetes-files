@@ -1,21 +1,216 @@
+# ============================================================================
+# KUBERNETES REPLICASET CONFIGURATION
+# ============================================================================
+# A ReplicaSet ensures that a specified number of pod replicas are always running
+# Purpose: Maintains desired state, auto-heals failed pods, enables scaling
+# ============================================================================
+
 apiVersion: apps/v1
 kind: ReplicaSet
+
+# ============================================================================
+# 1. METADATA SECTION
+# ============================================================================
+# Defines the identity and organization of the ReplicaSet resource
 metadata:
+  # Name: Unique identifier for this ReplicaSet within the namespace
   name: my-replicaset
+  
+  # Namespace: Logical cluster partition (default: 'default' if omitted)
+  namespace: default
+  
+  # Labels: Key-value pairs for organizing and selecting resources
+  # Best Practice: Always include labels for pod management and identification
   labels:
-    app: web-app
+    app: web-app              # Application name
+    version: v1               # Version identifier
+    environment: production   # Environment classification
+  
+  # Annotations: Metadata for documentation (not used for selection)
+  # Use for notes, team info, documentation links, etc.
+  annotations:
+    description: "Production nginx web server ReplicaSet"
+    managed-by: "devops-team"
+
+# ============================================================================
+# 2. SPEC SECTION - ReplicaSet Configuration
+# ============================================================================
 spec:
+  
+  # --------  REPLICA MANAGEMENT ----------
+  # Number of identical pod replicas to maintain
   replicas: 3
+  
+  # Minimum ready seconds: Pods must be ready for this duration to count as "ready"
+  # Helps with rolling updates to avoid cascade failures
+  minReadySeconds: 5
+  
+  # --------  POD SELECTION ----------
+  # How ReplicaSet identifies which pods to manage
   selector:
+    # matchLabels: Pods with ALL these labels will be managed by this ReplicaSet
+    # CRITICAL: Must match template.metadata.labels
     matchLabels:
-      app: web-app
+      app: web-app  # Must match pod template labels
+  
+  # --------  POD TEMPLATE ----------
+  # Blueprint for creating new pods
   template:
+    
+    # Pod Metadata
     metadata:
+      # Pod labels: MUST match selector.matchLabels
       labels:
         app: web-app
+        version: v1
+      
+      # Pod annotations (optional)
+      annotations:
+        description: "Nginx web server pod"
+    
+    # Pod Specification - Container details
     spec:
+      
+      # Restart Policy: What to do when a container exits
+      restartPolicy: Always  # Options: Always, OnFailure, Never
+      
+      # Termination Grace Period: Time to allow graceful shutdown (seconds)
+      terminationGracePeriodSeconds: 30
+      
+      # --------  CONTAINERS SECTION ----------
       containers:
-      - name: nginx
-        image: nginx:stable-alpine
+      
+      - name: nginx                    # Container identifier within the pod
+        image: nginx:stable-alpine     # Container image (repository:tag)
+        imagePullPolicy: IfNotPresent  # When to pull image (IfNotPresent, Always)
+        
+        # Container Ports: Expose container ports to the pod network
         ports:
-        - containerPort: 80
+        - name: http                   # Port name for reference
+          containerPort: 80            # Port inside container
+          protocol: TCP                # Protocol: TCP or UDP
+        
+        # --------  RESOURCE LIMITS ----------
+        # Resource requests and limits for container scheduling
+        resources:
+          requests:
+            cpu: 100m          # Minimum CPU needed (milli-cores)
+            memory: 128Mi      # Minimum memory needed
+          limits:
+            cpu: 500m          # Maximum CPU allowed
+            memory: 512Mi      # Maximum memory allowed
+        
+        # --------  HEALTH CHECKS ----------
+        # Liveness Probe: Is the container alive? (restart if fails)
+        livenessProbe:
+          httpGet:
+            path: /            # Health check endpoint
+            port: 80           # Port to check
+          initialDelaySeconds: 10    # Wait before first check
+          periodSeconds: 10          # Check every 10 seconds
+          timeoutSeconds: 5          # Timeout for each check
+          failureThreshold: 3        # Restart after 3 failures
+        
+        # Readiness Probe: Is the container ready to receive traffic?
+        readinessProbe:
+          httpGet:
+            path: /
+            port: 80
+          initialDelaySeconds: 5
+          periodSeconds: 5
+          timeoutSeconds: 3
+          failureThreshold: 2
+        
+        # --------  ENVIRONMENT VARIABLES (Optional) ----------
+        # env:
+        # - name: ENVIRONMENT
+        #   value: "production"
+        # - name: LOG_LEVEL
+        #   value: "info"
+        
+        # --------  VOLUME MOUNTS (Optional) ----------
+        # volumeMounts:
+        # - name: config-volume
+        #   mountPath: /etc/nginx/conf.d
+        #   readOnly: true
+      
+      # --------  VOLUMES (Optional) ----------
+      # volumes:
+      # - name: config-volume
+      #   configMap:
+      #     name: nginx-config
+      
+      # Pod Affinity (Optional): Control pod scheduling
+      # affinity:
+      #   podAntiAffinity:
+      #     preferredDuringSchedulingIgnoredDuringExecution:
+      #     - weight: 100
+      #       podAffinityTerm:
+      #         labelSelector:
+      #           matchExpressions:
+      #           - key: app
+      #             operator: In
+      #             values:
+      #             - web-app
+      #         topologyKey: kubernetes.io/hostname
+
+# ============================================================================
+# KEY CONCEPTS & BEST PRACTICES
+# ============================================================================
+# 
+# 1. SELECTORS & LABELS
+#    - selector.matchLabels MUST match template.metadata.labels exactly
+#    - Always use meaningful labels for organization and management
+#
+# 2. REPLICAS
+#    - ReplicaSet maintains exactly this many running pods
+#    - If a pod dies, a new one is automatically created
+#    - To scale: Edit replicas value or use kubectl scale command
+#
+# 3. RESOURCE REQUESTS & LIMITS
+#    - Requests: Guaranteed resources for scheduling
+#    - Limits: Maximum resources allowed
+#    - Essential for cluster stability and cost management
+#
+# 4. HEALTH CHECKS
+#    - Liveness: Restart dead containers
+#    - Readiness: Remove unready pods from load balancing
+#    - Together: Ensure high availability
+#
+# 5. IMAGE PULL POLICY
+#    - IfNotPresent: Use cached image if available (production)
+#    - Always: Always pull fresh image (good for :latest tags)
+#
+# 6. RESTART POLICY
+#    - Always: Default, restart failed containers (use for services)
+#    - OnFailure: Restart only on non-zero exit code
+#    - Never: Don't restart (use with external job management)
+#
+# ============================================================================
+# USEFUL KUBECTL COMMANDS
+# ============================================================================
+#
+# Create ReplicaSet:
+#   kubectl apply -f replicaSet.yml
+#
+# View ReplicaSet:
+#   kubectl get replicaset
+#   kubectl describe rs my-replicaset
+#   kubectl get rs my-replicaset -o yaml
+#
+# View Pods:
+#   kubectl get pods -l app=web-app
+#   kubectl logs <pod-name>
+#
+# Scale ReplicaSet:
+#   kubectl scale rs my-replicaset --replicas=5
+#   kubectl scale rs my-replicaset --replicas=1
+#
+# Update Image:
+#   kubectl set image rs/my-replicaset nginx=nginx:latest
+#
+# Delete ReplicaSet (and its pods):
+#   kubectl delete rs my-replicaset
+#   kubectl delete rs my-replicaset --cascade=orphan  # Keep pods
+#
+# ============================================================================
