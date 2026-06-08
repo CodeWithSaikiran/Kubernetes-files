@@ -1,22 +1,274 @@
+# ============================================================================
+# KUBERNETES DEPLOYMENT CONFIGURATION
+# ============================================================================
+# A Deployment manages Pods through ReplicaSets
+# Purpose: Declarative updates, rolling updates, rollbacks, scaling, self-healing
+# ============================================================================
+
 apiVersion: apps/v1
 kind: Deployment
+
+# ============================================================================
+# 1. METADATA SECTION
+# ============================================================================
+# Defines the identity and organization of the Deployment resource
 metadata:
+  # Name: Unique identifier for this Deployment within the namespace
   name: yourcare
-annotations:
-  kubernetes.io/change-cause: "Initial deployment of micro-ui-app"
+  
+  # Namespace: Logical cluster partition (default: 'default' if omitted)
+  namespace: default
+  
+  # Labels: Key-value pairs for organizing and selecting resources
+  # Best Practice: Always include labels for pod management and identification
+  labels:
+    app: micro-ui-app         # Application name
+    version: v1               # Version identifier
+    environment: production   # Environment classification
+    team: platform            # Team ownership
+  
+  # Annotations: Metadata for documentation (not used for selection)
+  # Use for notes, team info, documentation links, deployment info
+  annotations:
+    kubernetes.io/change-cause: "Initial deployment of micro-ui-app"
+    deployment-description: "Microservices UI application deployment"
+    managed-by: "devops-team"
+    documentation: "https://docs.example.com/micro-ui-app"
+
+# ============================================================================
+# 2. SPEC SECTION - Deployment Configuration
+# ============================================================================
 spec:
+  
+  # --------  REPLICA MANAGEMENT ----------
+  # Number of desired Pod replicas to maintain
   replicas: 3
+  
+  # Revision History Limit: Number of old ReplicaSets to keep for rollback
+  # Use for reverting to previous versions
+  revisionHistoryLimit: 10
+  
+  # Progress Deadline Seconds: Time (seconds) for deployment to progress
+  # If exceeded, deployment is marked as failed
+  progressDeadlineSeconds: 600
+  
+  # --------  POD SELECTION ----------
+  # How Deployment identifies which pods to manage
   selector:
+    # matchLabels: Pods with ALL these labels will be managed by this Deployment
+    # CRITICAL: Must match template.metadata.labels
     matchLabels:
-      app: micro-ui-app
+      app: micro-ui-app  # Must match pod template labels
+  
+  # --------  UPDATE STRATEGY ----------
+  # How to update pods when new version is deployed
+  strategy:
+    # Type: RollingUpdate (default) or Recreate
+    type: RollingUpdate
+    rollingUpdate:
+      # maxSurge: Maximum number of additional pods during update
+      # Can be integer or percentage (e.g., 25%)
+      maxSurge: 1
+      
+      # maxUnavailable: Maximum number of unavailable pods during update
+      # Can be integer or percentage (e.g., 25%)
+      maxUnavailable: 0  # Ensures zero-downtime deployment
+  
+  # --------  POD TEMPLATE ----------
+  # Blueprint for creating new pods
   template:
+    
+    # Pod Metadata
     metadata:
+      # Pod labels: MUST match selector.matchLabels
       labels:
         app: micro-ui-app
+        version: v1
+      
+      # Pod annotations (optional)
+      annotations:
+        description: "Nginx web server pod"
+    
+    # Pod Specification - Container details
     spec:
+      
+      # Restart Policy: What to do when a container exits
+      restartPolicy: Always  # Options: Always, OnFailure, Never
+      
+      # Termination Grace Period: Time to allow graceful shutdown (seconds)
+      terminationGracePeriodSeconds: 30
+      
+      # --------  CONTAINERS SECTION ----------
       containers:
-        - name: container-1
-          image: nginx:latest
-          ports:
-            - containerPort: 80
-  
+      
+      - name: container-1                # Container identifier within the pod
+        image: nginx:latest              # Container image (repository:tag)
+        imagePullPolicy: IfNotPresent    # When to pull image (IfNotPresent, Always)
+        
+        # Container Ports: Expose container ports to the pod network
+        ports:
+        - name: http                     # Port name for reference
+          containerPort: 80              # Port inside container
+          protocol: TCP                  # Protocol: TCP or UDP
+        
+        # --------  RESOURCE LIMITS ----------
+        # Resource requests and limits for container scheduling
+        resources:
+          requests:
+            cpu: 100m          # Minimum CPU needed (milli-cores)
+            memory: 128Mi      # Minimum memory needed
+          limits:
+            cpu: 500m          # Maximum CPU allowed
+            memory: 512Mi      # Maximum memory allowed
+        
+        # --------  HEALTH CHECKS ----------
+        # Liveness Probe: Is the container alive? (restart if fails)
+        livenessProbe:
+          httpGet:
+            path: /            # Health check endpoint
+            port: 80           # Port to check
+          initialDelaySeconds: 15   # Wait before first check
+          periodSeconds: 10         # Check every 10 seconds
+          timeoutSeconds: 5         # Timeout for each check
+          failureThreshold: 3       # Restart after 3 failures
+        
+        # Readiness Probe: Is the container ready to receive traffic?
+        readinessProbe:
+          httpGet:
+            path: /
+            port: 80
+          initialDelaySeconds: 5
+          periodSeconds: 5
+          timeoutSeconds: 3
+          failureThreshold: 2
+        
+        # Startup Probe: Has the container started? (for slow-starting apps)
+        # startupProbe:
+        #   httpGet:
+        #     path: /
+        #     port: 80
+        #   initialDelaySeconds: 0
+        #   periodSeconds: 10
+        #   timeoutSeconds: 3
+        #   failureThreshold: 30
+        
+        # --------  ENVIRONMENT VARIABLES (Optional) ----------
+        # env:
+        # - name: ENVIRONMENT
+        #   value: "production"
+        # - name: LOG_LEVEL
+        #   value: "info"
+        # - name: POD_NAME
+        #   valueFrom:
+        #     fieldRef:
+        #       fieldPath: metadata.name
+        
+        # --------  VOLUME MOUNTS (Optional) ----------
+        # volumeMounts:
+        # - name: config-volume
+        #   mountPath: /etc/nginx/conf.d
+        #   readOnly: true
+      
+      # --------  VOLUMES (Optional) ----------
+      # volumes:
+      # - name: config-volume
+      #   configMap:
+      #     name: nginx-config
+      
+      # Pod Affinity (Optional): Control pod scheduling
+      # affinity:
+      #   podAntiAffinity:
+      #     preferredDuringSchedulingIgnoredDuringExecution:
+      #     - weight: 100
+      #       podAffinityTerm:
+      #         labelSelector:
+      #           matchExpressions:
+      #           - key: app
+      #             operator: In
+      #             values:
+      #             - micro-ui-app
+      #         topologyKey: kubernetes.io/hostname
+
+# ============================================================================
+# KEY CONCEPTS & BEST PRACTICES
+# ============================================================================
+# 
+# 1. DEPLOYMENT vs REPLICASET
+#    - ReplicaSet: Ensures desired number of pods are running
+#    - Deployment: Manages ReplicaSets, provides rolling updates, rollback
+#    - Always use Deployment for managing pods
+#
+# 2. ROLLING UPDATE STRATEGY
+#    - Creates new pods gradually while removing old ones
+#    - Ensures zero-downtime deployment
+#    - maxSurge=1, maxUnavailable=0 is production best practice
+#
+# 3. REPLICAS & SCALING
+#    - Deployment maintains exactly this many running pods
+#    - If a pod dies, a new one is automatically created
+#    - To scale: Edit replicas value or use kubectl scale command
+#    - Use HPA (HorizontalPodAutoscaler) for automatic scaling
+#
+# 4. REVISION HISTORY
+#    - Each deployment change creates a new revision
+#    - Old ReplicaSets are kept for rollback capability
+#    - Use kubectl rollout history to view revisions
+#    - Use kubectl rollout undo to rollback to previous version
+#
+# 5. RESOURCE REQUESTS & LIMITS
+#    - Requests: Guaranteed resources for scheduling
+#    - Limits: Maximum resources allowed
+#    - Essential for cluster stability and cost management
+#
+# 6. HEALTH CHECKS
+#    - Liveness: Restart dead containers (critical apps)
+#    - Readiness: Remove unready pods from load balancing (traffic management)
+#    - Together: Ensure high availability and stability
+#
+# 7. IMAGE PULL POLICY
+#    - IfNotPresent: Use cached image if available (production)
+#    - Always: Always pull fresh image (good for :latest tags)
+#
+# 8. RESTART POLICY
+#    - Always: Default, restart failed containers (use for services)
+#    - OnFailure: Restart only on non-zero exit code
+#    - Never: Don't restart (use with external job management)
+#
+# ============================================================================
+# USEFUL KUBECTL COMMANDS
+# ============================================================================
+#
+# Create Deployment:
+#   kubectl apply -f deploy.yml
+#
+# View Deployments:
+#   kubectl get deployment
+#   kubectl describe deployment yourcare
+#   kubectl get deployment yourcare -o yaml
+#
+# View Pods:
+#   kubectl get pods -l app=micro-ui-app
+#   kubectl logs <pod-name>
+#   kubectl logs -f <pod-name>  # Follow logs
+#
+# Scale Deployment:
+#   kubectl scale deployment yourcare --replicas=5
+#   kubectl scale deployment yourcare --replicas=1
+#
+# Update Image:
+#   kubectl set image deployment/yourcare container-1=nginx:1.21
+#   kubectl rollout status deployment/yourcare  # Watch rollout
+#
+# Rollout Management:
+#   kubectl rollout history deployment/yourcare
+#   kubectl rollout undo deployment/yourcare  # Rollback to previous
+#   kubectl rollout undo deployment/yourcare --to-revision=2  # Specific revision
+#
+# Delete Deployment:
+#   kubectl delete deployment yourcare
+#
+# Pause/Resume Deployment:
+#   kubectl rollout pause deployment/yourcare
+#   kubectl rollout resume deployment/yourcare
+#
+# ============================================================================
