@@ -1,12 +1,239 @@
+# ============================================================================
+# KUBERNETES POD CONFIGURATION
+# ============================================================================
+# A Pod is the smallest deployable unit in Kubernetes
+# Purpose: Container wrapper providing networking, storage, and lifecycle management
+# ============================================================================
+
 apiVersion: v1
 kind: Pod
+
+# ============================================================================
+# 1. METADATA SECTION
+# ============================================================================
+# Defines the identity and organization of the Pod resource
 metadata:
+  # Name: Unique identifier for this Pod within the namespace
   name: mypod
+  
+  # Namespace: Logical cluster partition (default: 'default' if omitted)
+  namespace: default
+  
+  # Labels: Key-value pairs for organizing and selecting resources
+  # Best Practice: Always include labels for pod management and identification
   labels:
-    app: python-app
+    app: python-app            # Application name
+    version: v1                # Version identifier
+    environment: development   # Environment classification
+    tier: backend              # Application tier
+  
+  # Annotations: Metadata for documentation (not used for selection)
+  # Use for notes, team info, documentation links
+  annotations:
+    description: "Python application pod"
+    managed-by: "manual"
+    documentation: "https://docs.example.com/python-app"
+
+# ============================================================================
+# 2. SPEC SECTION - Pod Configuration
+# ============================================================================
 spec:
+  
+  # Restart Policy: What to do when a container exits
+  # Options: Always (default), OnFailure, Never
+  # Note: For Pods directly (not via Deployment), use OnFailure or Never
+  restartPolicy: Always
+  
+  # Termination Grace Period: Time to allow graceful shutdown (seconds)
+  # Gives applications time to clean up connections/transactions
+  terminationGracePeriodSeconds: 30
+  
+  # DNS Policy: How the Pod should resolve DNS names
+  # ClusterFirst (default): Use cluster DNS, fallback to node DNS
+  dnsPolicy: ClusterFirst
+  
+  # ========== CONTAINERS SECTION ==========
+  # One or more containers running in this pod
+  # Note: Containers share network namespace (same IP address)
   containers:
-    - name: cont-1
-      image: saikiran012/python-images:python-static-image-v1
-      ports:
-        - containerPort: 5000
+  
+  - name: cont-1                                    # Container identifier within the pod
+    image: saikiran012/python-images:python-static-image-v1  # Container image
+    imagePullPolicy: IfNotPresent                  # When to pull image
+    
+    # Container Ports: Expose container ports to the pod network
+    # Note: These ports are only for documentation; doesn't restrict traffic
+    ports:
+    - name: http                   # Port name for reference
+      containerPort: 5000          # Port inside container
+      protocol: TCP                # Protocol: TCP or UDP
+    
+    # --------  RESOURCE LIMITS ----------
+    # Resource requests and limits for container scheduling
+    resources:
+      requests:
+        cpu: 100m          # Minimum CPU needed (milli-cores)
+        memory: 128Mi      # Minimum memory needed
+      limits:
+        cpu: 500m          # Maximum CPU allowed
+        memory: 512Mi      # Maximum memory allowed
+    
+    # --------  HEALTH CHECKS ----------
+    # Liveness Probe: Is the container alive? (restart if fails)
+    livenessProbe:
+      httpGet:
+        path: /            # Health check endpoint
+        port: 5000         # Port to check
+      initialDelaySeconds: 15   # Wait before first check
+      periodSeconds: 10         # Check every 10 seconds
+      timeoutSeconds: 5         # Timeout for each check
+      failureThreshold: 3       # Restart after 3 failures
+    
+    # Readiness Probe: Is the container ready to receive traffic?
+    readinessProbe:
+      httpGet:
+        path: /
+        port: 5000
+      initialDelaySeconds: 5
+      periodSeconds: 5
+      timeoutSeconds: 3
+      failureThreshold: 2
+    
+    # Startup Probe: Has the container started? (for slow-starting apps)
+    # startupProbe:
+    #   httpGet:
+    #     path: /
+    #     port: 5000
+    #   initialDelaySeconds: 0
+    #   periodSeconds: 10
+    #   timeoutSeconds: 3
+    #   failureThreshold: 30
+    
+    # --------  ENVIRONMENT VARIABLES (Optional) ----------
+    # env:
+    # - name: ENVIRONMENT
+    #   value: "development"
+    # - name: LOG_LEVEL
+    #   value: "debug"
+    # - name: POD_NAME
+    #   valueFrom:
+    #     fieldRef:
+    #       fieldPath: metadata.name
+    # - name: NAMESPACE
+    #   valueFrom:
+    #     fieldRef:
+    #       fieldPath: metadata.namespace
+    
+    # --------  VOLUME MOUNTS (Optional) ----------
+    # volumeMounts:
+    # - name: app-data
+    #   mountPath: /app/data
+    # - name: config
+    #   mountPath: /app/config
+    #   readOnly: true
+  
+  # ========== VOLUMES SECTION (Optional) ==========
+  # volumes:
+  # - name: app-data
+  #   emptyDir: {}
+  # - name: config
+  #   configMap:
+  #     name: app-config
+
+# ============================================================================
+# KEY CONCEPTS & BEST PRACTICES
+# ============================================================================
+# 
+# 1. POD BASICS
+#    - Pod is the smallest deployable unit in Kubernetes
+#    - Pod wraps one or more containers (typically one)
+#    - Multiple containers in a pod share networking (same IP, port space)
+#    - Containers in pod can communicate via localhost
+#
+# 2. DIRECT POD DEPLOYMENT
+#    - WARNING: Never deploy Pods directly in production!
+#    - Always use Deployment, StatefulSet, DaemonSet, or Job
+#    - Why: No automatic restart, no scaling, no rolling updates
+#    - Direct Pods are only for testing, debugging, one-off tasks
+#
+# 3. CONTAINERS IN A POD
+#    - Typically 1 container per pod (microservices pattern)
+#    - Multiple containers only when tightly coupled
+#    - Example: Main container + logging sidecar
+#    - Containers share network namespace (same IP, same port space)
+#    - Use init containers for startup setup tasks
+#
+# 4. RESOURCE REQUESTS & LIMITS
+#    - Requests: Guaranteed resources for scheduling
+#    - Limits: Maximum resources allowed
+#    - Essential for cluster stability and cost management
+#    - Pod cannot exceed node's total resources
+#
+# 5. HEALTH CHECKS
+#    - Liveness: Restart dead containers (critical apps)
+#    - Readiness: Remove unready pods from load balancing
+#    - Startup: Wait for slow-starting apps to initialize
+#    - Together: Ensure high availability and stability
+#
+# 6. IMAGE PULL POLICY
+#    - IfNotPresent: Use cached image if available (production)
+#    - Always: Always pull fresh image (good for :latest tags)
+#    - Never: Use only cached image (must pre-pull)
+#
+# 7. RESTART POLICY
+#    - Always: Default, restart failed containers (use for services)
+#    - OnFailure: Restart only on non-zero exit code
+#    - Never: Don't restart (use with external job management)
+#
+# 8. DNS & NETWORKING
+#    - All containers in pod share same IP address
+#    - Containers communicate via localhost + port
+#    - Service name resolves to Pod IP within cluster
+#    - ClusterFirst DNS policy: Use cluster DNS first
+#
+# ============================================================================
+# USEFUL KUBECTL COMMANDS
+# ============================================================================
+#
+# Create Pod:
+#   kubectl apply -f pod.yml
+#
+# View Pods:
+#   kubectl get pods
+#   kubectl get pods -o wide  # More details
+#   kubectl describe pod mypod
+#   kubectl get pod mypod -o yaml
+#
+# View Logs:
+#   kubectl logs mypod
+#   kubectl logs mypod -f          # Follow logs
+#   kubectl logs mypod --previous  # Previous container logs (if crashed)
+#   kubectl logs mypod -c cont-1   # Specific container logs
+#
+# Execute Commands:
+#   kubectl exec -it mypod -- /bin/bash  # Shell access
+#   kubectl exec mypod -- ls /app        # Run single command
+#
+# Port Forwarding:
+#   kubectl port-forward mypod 5000:5000  # Local 5000 to Pod 5000
+#   kubectl port-forward mypod 8000:5000  # Local 8000 to Pod 5000
+#
+# Delete Pod:
+#   kubectl delete pod mypod
+#   kubectl delete pod mypod --grace-period=0 --force  # Force delete
+#
+# Watch Pod Status:
+#   kubectl get pods --watch
+#   kubectl describe pod mypod  # Detailed events
+#
+# ============================================================================
+# WARNING: POD LIFECYCLE
+# ============================================================================
+# Directly-deployed Pods DO NOT automatically restart or reschedule!
+# If a Pod dies:
+#   - No automatic restart (unless restartPolicy: Always for containers)
+#   - No rescheduling to another node if node fails
+#   - Manual intervention required
+#
+# SOLUTION: Always use Deployment, StatefulSet, DaemonSet, or Job
+# ============================================================================
